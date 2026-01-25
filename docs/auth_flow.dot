@@ -1,0 +1,39 @@
+digraph A2A_Auth_Flow {
+    rankdir=LR;
+    node [shape=box, fontname="Arial"];
+    
+    subgraph cluster_client {
+        label = "A2A Client (CLI / App)";
+        style = dashed;
+        Client [label="CLI Client\n(Service Account Context)"];
+        Human [label="Human User\n(OIDC Session)", shape=ellipse];
+    }
+
+    subgraph cluster_gcp {
+        label = "Google Cloud Platform";
+        color = blue;
+        
+        Discovery [label="Public Endpoint\n(/.well-known/agent-card.json)", style=filled, fillcolor=lightgrey];
+        IAP [label="Cloud Run / IAP\n(Identity Verification Gate)", style=filled, fillcolor=lightblue];
+        
+        subgraph cluster_server {
+            label = "A2A Go Server";
+            color = green;
+            Interceptor [label="CallInterceptor\n(Auth Logic)"];
+            Executor [label="AgentExecutor\n(Skill Logic)"];
+        }
+    }
+
+    // Discovery Flow
+    Human -> Discovery [label="1. Fetch AgentCard\n(Public)"];
+    
+    // Execution Flow
+    Client -> IAP [label="2. Invoke with\nService Account Token\n(Transport Auth)"];
+    Human -> Client [label="Provide Human JWT\n(App Auth)"];
+    Client -> IAP [label="Pass Human JWT\n(Custom Header)"];
+    
+    IAP -> Interceptor [label="3. Forward Request\n+ IAP Headers"];
+    Interceptor -> Executor [label="4. Authorized 'User'\nObject"];
+    
+    {rank=same; Discovery; IAP}
+}

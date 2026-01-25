@@ -1,0 +1,53 @@
+# Binaries
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Environment Variables
+.env
+
+# Dependencies
+vendor/
+
+# Beads / Issue Tracking
+# Note: Usually we want to track issues.jsonl for collaboration, 
+# but we ignore the local DB and locks.
+.beads/beads.db
+.beads/beads.db-shm
+.beads/beads.db-wal
+.beads/daemon.lock
+.beads/daemon.log
+.beads/daemon.pid
+.beads/last-touched
+.beads/.sync.lock
+
+# OS Specific
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE Specific
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Intermediate Build Artifacts
+docs/*.dot.png
+docs/gemini*.png
+
+# Documentation
+# Allow core primers/explainers, but ignore blog post drafts
+docs/posts/
+
+
+
+
+

@@ -1,0 +1,30 @@
+digraph A2A_Interaction {
+    rankdir=TB;
+    node [shape=box, fontname="Arial", style=filled, fillcolor=white];
+    
+    Client [label="A2A Client\n(Consumer)", fillcolor=lightblue];
+    Server [label="A2A Server\n(Provider)", fillcolor=lightgreen];
+
+    // Discovery phase
+    Client -> Server [label="1. Discovery Request\n(GET /.well-known/agent-card.json)"];
+    Server -> Client [label="2. Agent Card Manifest\n(JSON)"];
+
+    // Client-side processing
+    Client -> Client [label="Local Processing:\n- Parse Skills\n- Select Transport\n- Prepare Auth"];
+
+    // Interaction phase
+    Client -> Server [label="3. Execution Request\n(e.g., POST /invoke)"];
+    
+    subgraph cluster_server_internals {
+        label = "Server Processing";
+        style = dashed;
+        color = grey;
+        Dispatcher [label="Skill Dispatcher\n(Match Skill ID)"];
+        Skill [label="Agent Skill\n(Business Logic)"];
+        
+        Dispatcher -> Skill [label="Executes"];
+    }
+
+    Server -> Dispatcher [label="Routes Task"];
+    Skill -> Client [label="4. Response Events\n(Messages & Artifacts)"];
+}
