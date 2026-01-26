@@ -36,6 +36,7 @@ type model struct {
 	quitting bool
 	err      error
 	outDir   string
+	width    int
 }
 
 type eventMsg streamMsg
@@ -79,6 +80,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.quitting = true
 			return m, tea.Quit
 		}
+		return m, nil
+
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
 		return m, nil
 
 	case errMsg:
@@ -193,7 +198,13 @@ func (m model) View() string {
 	}
 	history = strings.Join(m.messages[start:], "\n")
 
-	return docStyle.Render(fmt.Sprintf(
+	// Adjust width to account for margins
+	width := m.width - 4
+	if width < 0 {
+		width = 0
+	}
+
+	return docStyle.Width(width).Render(fmt.Sprintf(
 		"%s\n\n%s\n\n(ctrl+c to quit)",
 		history,
 		statusLine,
