@@ -132,3 +132,25 @@ cargo install --git https://github.com/asciinema/agg
 
 5.  **Embed**:
     Add the GIF to your markdown using standard image syntax: `![Demo of Deep Research](demo_research.gif)`
+
+
+
+#### Example
+
+Begin research
+
+```bash
+./bin/client invoke "Analyze the evolution of service discovery from DNS to gRPC xDS, and explain how A2A's 'Semantic Discovery' differs from them." --skill ai_researcher -u http://localhost:9002
+```
+
+Resume (with out dir)
+
+```bash
+./bin/client resume  019bfb36-79b0-780e-9e58-8fa8e1d279f8 -u http://localhost:9002 
+```
+
+Chain
+
+```bash
+./bin/client invoke "Summarize this for a slide deck" --skill summarize --ref 019bfb36-79b0-780e-9e58-8fa8e1d279f8 -u http://localhost:9002
+```
