@@ -10,13 +10,19 @@ This scenario demonstrates how a single Task can span multiple messages to refin
     ```bash
     ./bin/client invoke "Research the history of the Go language" --skill ai_researcher
     ```
-    *Note the **Task ID** at the bottom of the output (e.g., `019499de-...`).*
+    *Note the **Task ID** at the bottom of the output (e.g., `019499de-...`). You can now safely Ctrl+C to detach.*
 
-2.  **Refine the Result**:
+2.  **Resume Observation**:
+    ```bash
+    ./bin/client resume <TASK_ID>
+    ```
+    *This connects to the existing stream to show progress without interrupting the agent.*
+
+3.  **Follow Up (After Completion)**:
     ```bash
     ./bin/client invoke "Explain the rationale behind the lack of generics until 1.18" --task <TASK_ID>
     ```
-    *Because we passed the `--task` flag, Gemini retains the context of the previous research turn.*
+    *Once the task is COMPLETED, you can use `invoke --task` to send a new message with context.*
 
 ---
 
@@ -70,3 +76,59 @@ Demonstrates the server's ability to route messages based on content.
     ./bin/client invoke "I want to research the history of Unix"
     ```
     *The server detects the keyword "research" and automatically dispatches to the `ai_researcher` skill.*
+
+---
+
+## Scenario 5: The Evolution of Discovery (Meta-Research)
+
+This scenario performs a "Meta-Research" task, using the agent to analyze the evolution of the very technologies it is built upon: gRPC, xDS, and A2A.
+
+1.  **Initiate the Deep Dive**:
+    ```bash
+    ./bin/client invoke "Analyze the evolution of service discovery from DNS to gRPC xDS, and explain how A2A's 'Semantic Discovery' differs from them." --skill ai_researcher
+    ```
+
+2.  **Observe the Process**:
+    *   Watch as the agent breaks this down into sub-steps (e.g., "Researching Envoy xDS," "Analyzing Agent Card schema").
+    *   This highlights the **Interactions API's** ability to plan complex, multi-step comparison tasks.
+
+3.  **Retrieve the Artifact**:
+    *   The final output will be a structured markdown report comparing **Technical Discovery** (IP/Port) vs. **Semantic Discovery** (Capabilities/Intent).
+
+---
+
+## Appendix: Recording Scenarios
+
+To capture these scenarios for documentation or blog posts, we use `asciinema` and `agg` (Asciinema Gif Generator).
+
+### Prerequisites
+```bash
+# via Homebrew
+brew install asciinema agg
+
+# OR via Cargo
+cargo install --locked --git https://github.com/asciinema/asciinema
+cargo install --git https://github.com/asciinema/agg
+```
+
+### Recording Workflow
+
+1.  **Start Recording**:
+    ```bash
+    asciinema rec demo_research.cast
+    ```
+
+2.  **Perform the Scenario**:
+    Run the client commands as described above. Type slowly and clearly.
+
+3.  **End Recording**:
+    Press `Ctrl+D` or type `exit`.
+
+4.  **Generate GIF**:
+    Use `agg` to render the `.cast` file into a high-quality GIF with a nice theme.
+    ```bash
+    agg --theme monokai demo_research.cast demo_research.gif
+    ```
+
+5.  **Embed**:
+    Add the GIF to your markdown using standard image syntax: `![Demo of Deep Research](demo_research.gif)`

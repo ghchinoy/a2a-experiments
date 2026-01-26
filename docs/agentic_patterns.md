@@ -14,9 +14,9 @@ The client opens a streaming connection (`SendStreamingMessage`). The server emi
 
 ### Pattern B: Asynchronous Resubscription
 The server immediately returns a `TaskID` and moves the task to a `working` state. The client can safely disconnect.
-*   **Workflow**: The client reconnects later using `ResubscribeToTask(taskId)`.
+*   **Workflow**: The client reconnects later using `ResubscribeToTask(taskId)` (exposed via the `resume` CLI command).
 *   **Use Case**: Deep research, video rendering, or complex data processing.
-*   **Pros**: Highly robust; survives network drops.
+*   **Pros**: Highly robust; survives network drops; allows "passive observation" of locked tasks.
 
 ### Pattern C: Push Notifications (Webhooks)
 The client provides a `PushConfig` (URL and Token). The server pushes the final `Task` and `Artifacts` to the client when finished.

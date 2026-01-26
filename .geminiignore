@@ -2,3 +2,4 @@
 # allow Gemini CLI to see these files
 # ref. https://geminicli.com/docs/cli/gemini-ignore/
 !docs/
+!docs/posts/

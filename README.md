@@ -49,9 +49,13 @@ The server starts on `127.0.0.1:9001`.
 ./bin/client invoke "hello"
 ```
 
-**Stateful Deep Research (The "Heartbeat" Pattern)**:
+**Stateful Deep Research (The "Resilience" Pattern)**:
 ```bash
+# 1. Start the task (you can Ctrl+C to detach at any time)
 ./bin/client invoke "Research the history of Unix" --skill ai_researcher
+
+# 2. Resume to watch progress or retrieve results later
+./bin/client resume <TASK_ID>
 ```
 
 **Cross-Skill Chaining (The "Reference" Pattern)**:

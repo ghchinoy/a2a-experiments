@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/a2aproject/a2a-go/a2a"
 	"github.com/a2aproject/a2a-go/a2aclient"
 	"github.com/a2aproject/a2a-go/a2aclient/agentcard"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
 )
 
@@ -20,6 +22,7 @@ var (
 	authToken    string
 	targetTaskID string
 	refTaskID    string
+	outDir       string
 )
 
 type tokenInterceptor struct {
@@ -74,7 +77,7 @@ func main() {
 			}
 
 			// 2. Create Client
-		httpClient := &http.Client{Timeout: 15 * time.Minute}
+			httpClient := &http.Client{Timeout: 15 * time.Minute}
 			opts := []a2aclient.FactoryOption{a2aclient.WithJSONRPCTransport(httpClient)}
 			if authToken != "" {
 				opts = append(opts, a2aclient.WithInterceptors(&tokenInterceptor{token: authToken}))
@@ -105,52 +108,147 @@ func main() {
 
 			fmt.Printf("Invoking A2A Service (Streaming)...\n\n")
 
-			var lastTaskID string
-
-			for event, err := range client.SendStreamingMessage(ctx, params) {
-				if err != nil {
-					log.Fatalf("\nStream Error: %v", err)
-				}
-
-				if event.TaskInfo().TaskID != "" {
-					lastTaskID = string(event.TaskInfo().TaskID)
-				}
-
-				switch v := event.(type) {
-				case *a2a.Message:
-					for _, p := range v.Parts {
-						if tp, ok := p.(a2a.TextPart); ok {
-							fmt.Printf("Agent: %s\n", tp.Text)
-						}
+			// Adapter: Convert Iterator to Channel for Bubble Tea
+			stream := make(chan streamMsg)
+			go func() {
+				defer close(stream)
+				for event, err := range client.SendStreamingMessage(ctx, params) {
+					stream <- streamMsg{Event: event, Err: err}
+					if err != nil {
+						return
 					}
-				case *a2a.TaskStatusUpdateEvent:
-					state := v.Status.State
-					msg := ""
-					if v.Status.Message != nil && len(v.Status.Message.Parts) > 0 {
-						if tp, ok := v.Status.Message.Parts[0].(a2a.TextPart); ok {
-							msg = " - " + tp.Text
-						}
-					}
-					fmt.Printf("[%s]%s\n", state, msg)
-				case *a2a.TaskArtifactUpdateEvent:
-					fmt.Printf("\n--- ARTIFACT RECEIVED: %s ---\n", v.Artifact.Name)
-					fmt.Printf("Description: %s\n", v.Artifact.Description)
-					for _, p := range v.Artifact.Parts {
-						if dp, ok := p.(a2a.DataPart); ok {
-							prettyJSON, _ := json.MarshalIndent(dp.Data, "", "  ")
-							fmt.Printf("Data:\n%s\n", string(prettyJSON))
-						} else if tp, ok := p.(a2a.TextPart); ok {
-							fmt.Printf("Content: %s\n", tp.Text)
-						}
-					}
-					fmt.Println("------------------------------")
 				}
+			}()
+
+			runTUI(stream)
+		},
+	}
+
+	var resumeCmd = &cobra.Command{
+		Use:   "resume [taskID]",
+		Short: "Resume listening to an existing task",
+		Args:  cobra.ExactArgs(1),
+		Run: func(cmd *cobra.Command, args []string) {
+			taskID := args[0]
+			ctx := context.Background()
+
+			card, err := agentcard.DefaultResolver.Resolve(ctx, serviceURL)
+			if err != nil {
+				log.Fatalf("Error: %v", err)
 			}
-			fmt.Printf("\nTask ID: %s (use --task %s to continue, or --ref %s to reference)\n", lastTaskID, lastTaskID, lastTaskID)
+
+			httpClient := &http.Client{Timeout: 15 * time.Minute}
+			opts := []a2aclient.FactoryOption{a2aclient.WithJSONRPCTransport(httpClient)}
+			if authToken != "" {
+				opts = append(opts, a2aclient.WithInterceptors(&tokenInterceptor{token: authToken}))
+			}
+
+			client, err := a2aclient.NewFromCard(ctx, card, opts...)
+			if err != nil {
+				log.Fatalf("Error: %v", err)
+			}
+
+			fmt.Printf("Resuming Task %s ...\n\n", taskID)
+
+			tid := a2a.TaskID(taskID)
+			
+			// Check status first
+			task, err := client.GetTask(ctx, &a2a.TaskQueryParams{ID: tid})
+			if err != nil {
+				errMsg := err.Error()
+				// Simple string check for "not found" as the SDK error might be wrapped
+				if len(errMsg) > 0 { // Check if it looks like a "not found" error
+					// Just print the error for now, but add a hint
+					fmt.Printf("Error: %v\n", err)
+					fmt.Println("Hint: If you are using the default in-memory store, restarting the server wipes all tasks.")
+					os.Exit(1)
+				}
+				log.Fatalf("Error retrieving task status: %v", err)
+			}
+
+			if task.Status.State == a2a.TaskStateCompleted || task.Status.State == a2a.TaskStateFailed || task.Status.State == a2a.TaskStateRejected {
+				displayTaskResult(task, outDir)
+				return
+			}
+
+			// If active, stream updates
+			fmt.Println("Task is active. Connecting to stream...")
+			stream := make(chan streamMsg)
+			go func() {
+				defer close(stream)
+				for event, err := range client.ResubscribeToTask(ctx, &a2a.TaskIDParams{ID: tid}) {
+					stream <- streamMsg{Event: event, Err: err}
+					if err != nil {
+						return
+					}
+				}
+			}()
+
+			runTUI(stream)
 		},
 	}
 
 	invokeCmd.Flags().StringVarP(&skillID, "skill", "s", "", "Skill ID")
-	rootCmd.AddCommand(describeCmd, invokeCmd)
+	invokeCmd.Flags().StringVarP(&outDir, "out-dir", "o", "", "Directory to save artifacts to")
+	
+	resumeCmd.Flags().StringVarP(&outDir, "out-dir", "o", "", "Directory to save artifacts to")
+
+	rootCmd.AddCommand(describeCmd, invokeCmd, resumeCmd)
 	rootCmd.Execute()
+}
+
+func runTUI(stream chan streamMsg) {
+	p := tea.NewProgram(initialModel(stream, outDir))
+	finalModel, err := p.Run()
+	if err != nil {
+		log.Fatalf("Alas, there's been an error: %v", err)
+	}
+
+	if m, ok := finalModel.(model); ok && m.taskID != "" {
+		fmt.Printf("\nTask ID: %s (use --task %s to continue, or --ref %s to reference)\n", m.taskID, m.taskID, m.taskID)
+	}
+}
+
+func displayTaskResult(task *a2a.Task, outDir string) {
+	fmt.Printf("Task Status: [%s]\n", task.Status.State)
+	
+	if len(task.Artifacts) == 0 {
+		fmt.Println("No artifacts produced.")
+		return
+	}
+
+	fmt.Printf("\n--- %d ARTIFACT(S) AVAILABLE ---\n", len(task.Artifacts))
+	
+	for _, art := range task.Artifacts {
+		fmt.Printf("\nName: %s\n", art.Name)
+		fmt.Printf("Description: %s\n", art.Description)
+		
+		truncated := false
+		// Preview content
+		for _, p := range art.Parts {
+			if dp, ok := p.(a2a.DataPart); ok {
+				prettyJSON, _ := json.MarshalIndent(dp.Data, "", "  ")
+				fmt.Printf("Data (Preview):\n%s\n", string(prettyJSON))
+			} else if tp, ok := p.(a2a.TextPart); ok {
+				preview := tp.Text
+				if len(preview) > 500 {
+					preview = preview[:500] + "... (truncated)"
+					truncated = true
+				}
+				fmt.Printf("Content (Preview):\n%s\n", preview)
+			}
+		}
+
+		if outDir != "" {
+			path, err := saveArtifact(outDir, *art)
+			if err != nil {
+				fmt.Printf("Error saving artifact: %v\n", err)
+			} else {
+				fmt.Printf(">> Saved to: %s\n", path)
+			}
+		} else if truncated {
+			fmt.Println("(Hint: Use --out-dir <path> to save the full artifact content)")
+		}
+	}
+	fmt.Println("\n------------------------------")
 }
