@@ -41,7 +41,12 @@ go build -o bin/server ./server
 ```
 The server starts on `127.0.0.1:9001`.
 
-### 2. Use the CLI Client
+### 2. Build and Use the CLI Client
+
+First, compile the client tool:
+```bash
+go build -o bin/client ./client
+```
 
 **Discovery & Basic Interaction**:
 ```bash
