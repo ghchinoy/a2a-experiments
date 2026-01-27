@@ -71,7 +71,7 @@ type FunctionResponse struct {
 	Response map[string]any `json:"response"`
 }
 
-// Content represents a turn in an interaction.
+// Content represents a single turn in an interaction, containing the role and the actual data (parts or text).
 type Content struct {
 	Role  Role   `json:"role,omitempty"`
 	Parts []Part `json:"parts,omitempty"`
@@ -79,6 +79,7 @@ type Content struct {
 }
 
 // InteractionRequest defines the payload for creating a new interaction.
+// It supports both standard model input and specialized agent execution.
 type InteractionRequest struct {
 	Model                 string            `json:"model,omitempty"`
 	Agent                 string            `json:"agent,omitempty"`

@@ -34,7 +34,8 @@ type Client struct {
 	HTTPClient *http.Client
 }
 
-// NewClient creates a new Interactions API client.
+// NewClient creates a new Interactions API client with the provided API key.
+// It initializes the HTTP client with a default timeout of 60 seconds.
 func NewClient(apiKey string) *Client {
 	return &Client{
 		APIKey:     apiKey,
