@@ -2,18 +2,20 @@
 
 This project implements a hybrid A2A/HTTP service and a versatile CLI client, following modern architectural best practices.
 
-## 1. CLI Client (`a2acli`)
+## 1. A2A CLI Client (`a2acli`)
 
-The client is built using the **Cobra** CLI framework and enhanced with **Bubble Tea** for a rich terminal user interface (TUI).
+The A2A client is built using the **Cobra** CLI framework and enhanced with **Bubble Tea** for a rich terminal user interface (TUI).
 
 ### Key Features
 *   **Command Router**: Provides `describe`, `invoke`, and `resume` subcommands.
+  *   **AgentCard Resolver**: Automatically discovers service capabilities from the `/.well-known/agent-card.json` endpoint with the `describe` command.
+  *   **Task Invocation**: The `invoke` command initiates a message to the A2A server, supporting streaming feedback, explicit skill targeting via `--skill`, and continuity with existing tasks using `--task` or cross-task referencing with `--ref`.
+  *   **Resilience (The "Resume" Pattern)**: Implements `client.ResubscribeToTask` via the `resume` command, allowing users to detach (Ctrl+C) and re-attach to active tasks without interrupting the server-side process.
+*   **Artifact Management**: Automatically parses `DataPart` and `FilePart` outputs of the A2A server, with support for saving full content to disk via `--out-dir`.
 *   **Rich TUI**: Uses `bubbletea` and `lipgloss` to display streaming status, text wrapping, and spinners during long-running tasks.
-*   **Resilience (The "Resume" Pattern)**: Implements `client.ResubscribeToTask` via the `resume` command, allowing users to detach (Ctrl+C) and re-attach to active tasks without interrupting the server-side process.
-*   **Artifact Management**: Automatically parses `DataPart` and `FilePart` outputs, with support for saving full content to disk via `--out-dir`.
-*   **AgentCard Resolver**: Automatically discovers service capabilities from the `/.well-known/agent-card.json` endpoint.
 
-## 2. The Hybrid Server
+
+## 2. The A2A Server - a hybrid approach
 
 The server is a multi-modal application that serves both A2A protocol requests and standard HTTP traffic.
 
@@ -26,7 +28,7 @@ The server decouples the *logic* of a skill from the *transport*.
 
 ## 3. Interactions API Library (`pkg/interactions`)
 
-The project includes a custom Go library that wraps the **Gemini Interactions REST API**. This library enables the `ai_researcher` skill to perform long-running reasoning tasks.
+The project includes a custom Go library that wraps the **Gemini Interactions REST API** as defined in [Interactions API](interactions_api.md). This library enables the `ai_researcher` skill to perform long-running reasoning tasks.
 
 *   **State Management**: Manages `previous_interaction_id` to maintain multi-turn context on the Gemini server, reducing client-side token overhead.
 *   **Background Execution**: Uses `background=true` to allow the model to "think" and research asynchronously without blocking the A2A handler.
@@ -77,7 +79,7 @@ graph TD
 ## 7. Directory Structure
 
 *   `/server`: Core server logic and A2A service definition.
-*   `/client`: Cobra CLI with Bubble Tea TUI.
+*   `/client`: Cobra A2A CLI with Bubble Tea TUI.
 *   `/pkg/interactions`: Custom library for Gemini Interactions API.
 *   `/docs`: Detailed architecture, patterns, and scenarios.
 *   `/bin`: Compiled binaries.
