@@ -1,6 +1,6 @@
-# Simple A2A Example
+# A2A Experiments
 
-This project is an authoritative blueprint for building stateful, resilient A2A (Agent-to-Agent) services. It demonstrates how to bridge the **A2A Protocol** with the **Gemini Interactions API** to solve the "Resumption Problem" for long-running autonomous agents.
+This project is an experimental blueprint for building stateful, resilient A2A (Agent-to-Agent) services. It demonstrates how to bridge the **A2A Protocol** with the **Gemini Interactions API** to solve the "Resumption Problem" for long-running autonomous agents.
 
 ## 📖 Documentation
 
