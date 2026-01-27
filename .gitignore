@@ -23,6 +23,7 @@ vendor/
 .beads/daemon.pid
 .beads/last-touched
 .beads/.sync.lock
+.beads/export-state/
 
 # OS Specific
 .DS_Store
