@@ -8,6 +8,7 @@ This project is an authoritative blueprint for building stateful, resilient A2A 
 *   **[Agentic Design Patterns](docs/agentic_patterns.md)**: Best practices for long-running tasks, heartbeats, and artifacts.
 *   **[Interaction Scenarios](docs/scenarios.md)**: Step-by-step examples of stateful workflows, session continuity, and cross-skill chaining.
 *   **[Project Architecture](docs/architecture.md)**: Deep dive into the modular hybrid server and the "Explicit Store Pattern."
+*   **[Code Walkthrough](docs/code_walkthrough.md)**: A guided tour of the codebase for Go beginners, mapping concepts to files.
 *   **[Authentication & Security](docs/authentication.md)**: Secure remote access and delegated identity in the Google Cloud ecosystem.
 
 ## 🛠 Components
