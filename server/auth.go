@@ -15,17 +15,17 @@ type authInterceptor struct {
 }
 
 // Before is executed before every A2A protocol call.
-func (i *authInterceptor) Before(ctx context.Context, callCtx *a2asrv.CallContext, req *a2asrv.Request) (context.Context, error) {
-	// Extract Authorization header from RequestMeta (Case-insensitive)
-	authHeaders, ok := callCtx.RequestMeta().Get("Authorization")
-	if ok && len(authHeaders) > 0 {
-		// Basic demo logic: check for 'secret-token'
-		token := strings.TrimPrefix(authHeaders[0], "Bearer ")
-		if token == "secret-token" {
-			// Successfully authenticated
-			callCtx.User = &a2asrv.AuthenticatedUser{UserName: "Admin"}
-			log.Println("Request successfully authenticated as Admin")
-		}
-	}
-	return ctx, nil
+func (i *authInterceptor) Before(ctx context.Context, callCtx *a2asrv.CallContext, req *a2asrv.Request) (context.Context, any, error) {
+        // Extract Authorization header from RequestMeta (Case-insensitive)
+        authHeaders, ok := callCtx.ServiceParams().Get("Authorization")
+        if ok && len(authHeaders) > 0 {
+                // Basic demo logic: check for 'secret-token'
+                token := strings.TrimPrefix(authHeaders[0], "Bearer ")
+                if token == "secret-token" {
+                        // Successfully authenticated
+                        callCtx.User = a2asrv.NewAuthenticatedUser("Admin", nil)
+                        log.Println("Request successfully authenticated as Admin")
+                }
+        }
+        return ctx, nil, nil
 }

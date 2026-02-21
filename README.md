@@ -1,6 +1,6 @@
 # A2A Experiments
 
-This project is an experimental blueprint for building stateful, resilient A2A (Agent-to-Agent) services. It demonstrates how to bridge the **A2A Protocol** with the **Gemini Interactions API** to solve the "Resumption Problem" for long-running autonomous agents.
+This project is an experimental blueprint for building stateful, resilient A2A (Agent-to-Agent) services. It demonstrates how to bridge the **A2A Protocol v1.0** with the **Gemini Interactions API** to solve the "Resumption Problem" for long-running autonomous agents.
 
 ## 📖 Documentation
 
@@ -13,8 +13,8 @@ This project is an experimental blueprint for building stateful, resilient A2A (
 
 ## 🛠 Components
 
-- **Hybrid Server**: An A2A + HTTP agent featuring natural language intent detection, auth-gated skills, and a shared persistent TaskStore.
-- **Cobra CLI (`a2acli`)**: A professional developer tool for discovering Agent Cards and invoking skills with streaming feedback.
+- **Hybrid Server**: An A2A + HTTP agent featuring natural language intent detection, auth-gated skills, and a shared persistent TaskStore. Fully compliant with **A2A Protocol v1.0**.
+- **Cobra CLI (`a2acli`)**: *(Deprecated)* A professional developer tool for discovering Agent Cards and invoking skills with streaming feedback. **Note: The client in this repo is deprecated. Please use the standalone client at [github.com/ghchinoy/a2acli](https://github.com/ghchinoy/a2acli).**
 - **Interactions Library**: A custom Go implementation of the Gemini Interactions REST API, supporting stateful turns and background execution.
 - **`itest` Utility**: A direct CLI tool for verifying Gemini Interactions API behavior independent of the A2A layer.
 
@@ -42,32 +42,33 @@ go build -o bin/server ./server
 ```
 The server starts on `127.0.0.1:9001`.
 
-### 2. Build and Use the CLI Client
+### 2. Install and Use the CLI Client
 
-First, compile the client tool:
+The local client has been deprecated in favor of a standalone project. Please install the [A2A CLI](https://github.com/ghchinoy/a2acli):
+
 ```bash
-go build -o bin/client ./client
+go install github.com/ghchinoy/a2acli/cmd/a2acli@latest
 ```
 
 **Discovery & Basic Interaction**:
 ```bash
-./bin/client describe
-./bin/client invoke "hello"
+a2acli describe --service-url http://127.0.0.1:9001
+a2acli invoke "hello" --service-url http://127.0.0.1:9001
 ```
 
 **Stateful Deep Research (The "Resilience" Pattern)**:
 ```bash
 # 1. Start the task (you can Ctrl+C to detach at any time)
-./bin/client invoke "Research the history of Unix" --skill ai_researcher
+a2acli invoke "Research the history of Unix" --skill ai_researcher --service-url http://127.0.0.1:9001
 
 # 2. Resume to watch progress or retrieve results later
-./bin/client resume <TASK_ID>
+a2acli resume <TASK_ID> --service-url http://127.0.0.1:9001
 ```
 
 **Cross-Skill Chaining (The "Reference" Pattern)**:
 ```bash
 # Use the Task ID from a completed research mission
-./bin/client invoke "Summarize the findings" --skill summarize --ref <TASK_ID>
+a2acli invoke "Summarize the findings" --skill summarize --ref <TASK_ID> --service-url http://127.0.0.1:9001
 ```
 
 ---
@@ -84,8 +85,8 @@ To minimize boilerplate and maximize flexibility, this project follows the **Ski
 
 ## 📂 Project Structure
 
-- `server/`: Modular A2A server implementation (`main.go`, `skills.go`, `store.go`, `auth.go`).
-- `client/`: Cobra CLI implementation.
+- `server/`: Modular A2A server implementation (`main.go`, `skills.go`, `auth.go`).
+- `client/`: *(Deprecated)* Legacy Cobra CLI implementation. Use [ghchinoy/a2acli](https://github.com/ghchinoy/a2acli) instead.
 - `pkg/interactions/`: Go library for Gemini Interactions API.
 - `cmd/itest/`: Interactions API verification tool.
 - `docs/`: Architectural documentation, diagrams, and scenarios.

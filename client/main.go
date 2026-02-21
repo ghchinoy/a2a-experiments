@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/a2aproject/a2a-go/a2a"
@@ -17,12 +18,13 @@ import (
 )
 
 var (
-	serviceURL   string
-	skillID      string
-	authToken    string
-	targetTaskID string
-	refTaskID    string
-	outDir       string
+	serviceURL      string
+	skillID         string
+	authToken       string
+	targetTaskID    string
+	refTaskID       string
+	outDir          string
+	instructionFile string
 )
 
 type tokenInterceptor struct {
@@ -30,11 +32,14 @@ type tokenInterceptor struct {
 	token string
 }
 
-func (i *tokenInterceptor) Before(ctx context.Context, req *a2aclient.Request) (context.Context, error) {
+func (i *tokenInterceptor) Before(ctx context.Context, req *a2aclient.Request) (context.Context, any, error) {
 	if i.token != "" {
-		req.Meta["Authorization"] = []string{"Bearer " + i.token}
+		if req.ServiceParams == nil {
+			req.ServiceParams = make(a2aclient.ServiceParams)
+		}
+		req.ServiceParams["Authorization"] = []string{"Bearer " + i.token}
 	}
-	return ctx, nil
+	return ctx, nil, nil
 }
 
 func main() {
@@ -56,9 +61,26 @@ func main() {
 			if err != nil {
 				log.Fatalf("Error: %v", err)
 			}
-			fmt.Printf("Agent: %s\nSkills:\n", card.Name)
+			fmt.Printf("Agent: %s\n", card.Name)
+			if card.Description != "" {
+				fmt.Printf("Description: %s\n", card.Description)
+			}
+			fmt.Printf("Capabilities: [Streaming: %v]\n", card.Capabilities.Streaming)
+			fmt.Printf("\nSkills:\n")
 			for _, s := range card.Skills {
 				fmt.Printf("  - [%s] %s\n", s.ID, s.Name)
+				if s.Description != "" {
+					fmt.Printf("    Description: %s\n", s.Description)
+				}
+				if len(s.SecurityRequirements) > 0 {
+					var schemes []string
+					for _, req := range s.SecurityRequirements {
+						for name := range req {
+							schemes = append(schemes, string(name))
+						}
+					}
+					fmt.Printf("    Security: %s\n", strings.Join(schemes, ", "))
+				}
 			}
 		},
 	}
@@ -69,6 +91,15 @@ func main() {
 		Args:  cobra.MinimumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
 			messageText := args[0]
+
+			if instructionFile != "" {
+				content, err := os.ReadFile(instructionFile)
+				if err != nil {
+					log.Fatalf("Error reading instruction file: %v", err)
+				}
+				messageText = fmt.Sprintf("%s\n\nSupplemental Instructions:\n%s", messageText, string(content))
+			}
+
 			ctx := context.Background()
 
 			card, err := agentcard.DefaultResolver.Resolve(ctx, serviceURL)
@@ -80,7 +111,7 @@ func main() {
 			httpClient := &http.Client{Timeout: 15 * time.Minute}
 			opts := []a2aclient.FactoryOption{a2aclient.WithJSONRPCTransport(httpClient)}
 			if authToken != "" {
-				opts = append(opts, a2aclient.WithInterceptors(&tokenInterceptor{token: authToken}))
+				opts = append(opts, a2aclient.WithCallInterceptors(&tokenInterceptor{token: authToken}))
 			}
 
 			client, err := a2aclient.NewFromCard(ctx, card, opts...)
@@ -89,7 +120,7 @@ func main() {
 			}
 
 			// 3. Prepare Message
-			msg := a2a.NewMessage(a2a.MessageRoleUser, a2a.TextPart{Text: messageText})
+			msg := a2a.NewMessage(a2a.MessageRoleUser, a2a.NewTextPart(messageText))
 			if targetTaskID != "" {
 				msg.TaskID = a2a.TaskID(targetTaskID)
 				fmt.Printf("Continuing Task: %s\n", targetTaskID)
@@ -99,7 +130,7 @@ func main() {
 				fmt.Printf("Referencing Task: %s\n", refTaskID)
 			}
 
-			params := &a2a.MessageSendParams{
+			params := &a2a.SendMessageRequest{
 				Message: msg,
 			}
 			if skillID != "" {
@@ -140,7 +171,7 @@ func main() {
 			httpClient := &http.Client{Timeout: 15 * time.Minute}
 			opts := []a2aclient.FactoryOption{a2aclient.WithJSONRPCTransport(httpClient)}
 			if authToken != "" {
-				opts = append(opts, a2aclient.WithInterceptors(&tokenInterceptor{token: authToken}))
+				opts = append(opts, a2aclient.WithCallInterceptors(&tokenInterceptor{token: authToken}))
 			}
 
 			client, err := a2aclient.NewFromCard(ctx, card, opts...)
@@ -151,9 +182,9 @@ func main() {
 			fmt.Printf("Resuming Task %s ...\n\n", taskID)
 
 			tid := a2a.TaskID(taskID)
-			
+
 			// Check status first
-			task, err := client.GetTask(ctx, &a2a.TaskQueryParams{ID: tid})
+			task, err := client.GetTask(ctx, &a2a.GetTaskRequest{ID: tid})
 			if err != nil {
 				errMsg := err.Error()
 				// Simple string check for "not found" as the SDK error might be wrapped
@@ -176,7 +207,7 @@ func main() {
 			stream := make(chan streamMsg)
 			go func() {
 				defer close(stream)
-				for event, err := range client.ResubscribeToTask(ctx, &a2a.TaskIDParams{ID: tid}) {
+				for event, err := range client.SubscribeToTask(ctx, &a2a.SubscribeToTaskRequest{ID: tid}) {
 					stream <- streamMsg{Event: event, Err: err}
 					if err != nil {
 						return
@@ -188,12 +219,63 @@ func main() {
 		},
 	}
 
+	var statusCmd = &cobra.Command{
+		Use:   "status [taskID]",
+		Short: "Get the status of a task",
+		Args:  cobra.ExactArgs(1),
+		Run: func(cmd *cobra.Command, args []string) {
+			taskID := args[0]
+			ctx := context.Background()
+
+			card, err := agentcard.DefaultResolver.Resolve(ctx, serviceURL)
+			if err != nil {
+				log.Fatalf("Error: %v", err)
+			}
+
+			httpClient := &http.Client{Timeout: 15 * time.Minute}
+			opts := []a2aclient.FactoryOption{a2aclient.WithJSONRPCTransport(httpClient)}
+			if authToken != "" {
+				opts = append(opts, a2aclient.WithCallInterceptors(&tokenInterceptor{token: authToken}))
+			}
+
+			client, err := a2aclient.NewFromCard(ctx, card, opts...)
+			if err != nil {
+				log.Fatalf("Error: %v", err)
+			}
+
+			tid := a2a.TaskID(taskID)
+			task, err := client.GetTask(ctx, &a2a.GetTaskRequest{ID: tid})
+			if err != nil {
+				log.Fatalf("Error retrieving task: %v", err)
+			}
+
+			fmt.Printf("Task ID: %s\n", task.ID)
+			fmt.Printf("Status:  %s\n", task.Status.State)
+			if task.Status.Message != nil {
+				for _, p := range task.Status.Message.Parts {
+					if text, ok := p.Content.(a2a.Text); ok {
+						fmt.Printf("Message: %s\n", string(text))
+					}
+				}
+			}
+			fmt.Printf("Artifacts: %d\n", len(task.Artifacts))
+
+			if len(task.Metadata) > 0 {
+				fmt.Println("\nMetadata:")
+				for k, v := range task.Metadata {
+					fmt.Printf("  %s: %v\n", k, v)
+				}
+			}
+		},
+	}
+
 	invokeCmd.Flags().StringVarP(&skillID, "skill", "s", "", "Skill ID")
 	invokeCmd.Flags().StringVarP(&outDir, "out-dir", "o", "", "Directory to save artifacts to")
-	
+	invokeCmd.Flags().StringVarP(&instructionFile, "instruction-file", "f", "", "Path to a file with supplemental instructions")
+
 	resumeCmd.Flags().StringVarP(&outDir, "out-dir", "o", "", "Directory to save artifacts to")
 
-	rootCmd.AddCommand(describeCmd, invokeCmd, resumeCmd)
+	rootCmd.AddCommand(describeCmd, invokeCmd, resumeCmd, statusCmd)
 	rootCmd.Execute()
 }
 
@@ -211,26 +293,26 @@ func runTUI(stream chan streamMsg) {
 
 func displayTaskResult(task *a2a.Task, outDir string) {
 	fmt.Printf("Task Status: [%s]\n", task.Status.State)
-	
+
 	if len(task.Artifacts) == 0 {
 		fmt.Println("No artifacts produced.")
 		return
 	}
 
 	fmt.Printf("\n--- %d ARTIFACT(S) AVAILABLE ---\n", len(task.Artifacts))
-	
+
 	for _, art := range task.Artifacts {
 		fmt.Printf("\nName: %s\n", art.Name)
 		fmt.Printf("Description: %s\n", art.Description)
-		
+
 		truncated := false
 		// Preview content
 		for _, p := range art.Parts {
-			if dp, ok := p.(a2a.DataPart); ok {
-				prettyJSON, _ := json.MarshalIndent(dp.Data, "", "  ")
+			if dp, ok := p.Content.(a2a.Data); ok {
+				prettyJSON, _ := json.MarshalIndent(dp, "", "  ")
 				fmt.Printf("Data (Preview):\n%s\n", string(prettyJSON))
-			} else if tp, ok := p.(a2a.TextPart); ok {
-				preview := tp.Text
+			} else if text, ok := p.Content.(a2a.Text); ok {
+				preview := string(text)
 				if len(preview) > 500 {
 					preview = preview[:500] + "... (truncated)"
 					truncated = true

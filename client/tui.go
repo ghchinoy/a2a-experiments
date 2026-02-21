@@ -117,8 +117,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch v := event.(type) {
 		case *a2a.Message:
 			for _, p := range v.Parts {
-				if tp, ok := p.(a2a.TextPart); ok {
-					m.messages = append(m.messages, agentStyle.Render(fmt.Sprintf("Agent: %s", tp.Text)))
+				if text, ok := p.Content.(a2a.Text); ok {
+					m.messages = append(m.messages, agentStyle.Render(fmt.Sprintf("Agent: %s", string(text))))
 				}
 			}
 			m.status = "Received Message"
@@ -127,8 +127,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.status = string(v.Status.State)
 			statusMsg := ""
 			if v.Status.Message != nil && len(v.Status.Message.Parts) > 0 {
-				if tp, ok := v.Status.Message.Parts[0].(a2a.TextPart); ok {
-					statusMsg = tp.Text
+				if text, ok := v.Status.Message.Parts[0].Content.(a2a.Text); ok {
+					statusMsg = string(text)
 				}
 			}
 			if statusMsg != "" {
@@ -152,13 +152,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			// Display preview
 			for _, p := range v.Artifact.Parts {
-				if dp, ok := p.(a2a.DataPart); ok {
-					prettyJSON, _ := json.MarshalIndent(dp.Data, "", "  ")
+				if dp, ok := p.Content.(a2a.Data); ok {
+					prettyJSON, _ := json.MarshalIndent(dp, "", "  ")
 					preview := string(prettyJSON)
 					if len(preview) > 200 { preview = preview[:200] + "..." }
 					m.messages = append(m.messages, fmt.Sprintf("Data: %s", preview))
-				} else if tp, ok := p.(a2a.TextPart); ok {
-					preview := tp.Text
+				} else if text, ok := p.Content.(a2a.Text); ok {
+					preview := string(text)
 					if len(preview) > 200 { preview = preview[:200] + "..." }
 					m.messages = append(m.messages, fmt.Sprintf("Text: %s", preview))
 				}
@@ -224,11 +224,11 @@ func saveArtifact(outDir string, artifact a2a.Artifact) (string, error) {
 	
 	var contentBytes []byte
 	for _, p := range artifact.Parts {
-		if dp, ok := p.(a2a.DataPart); ok {
-			prettyJSON, _ := json.MarshalIndent(dp.Data, "", "  ")
+		if dp, ok := p.Content.(a2a.Data); ok {
+			prettyJSON, _ := json.MarshalIndent(dp, "", "  ")
 			contentBytes = prettyJSON
-		} else if tp, ok := p.(a2a.TextPart); ok {
-			contentBytes = []byte(tp.Text)
+		} else if text, ok := p.Content.(a2a.Text); ok {
+			contentBytes = []byte(string(text))
 		}
 	}
 	

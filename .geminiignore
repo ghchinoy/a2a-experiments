@@ -3,3 +3,5 @@
 # ref. https://geminicli.com/docs/cli/gemini-ignore/
 !docs/
 !docs/posts/
+
+!research_results/

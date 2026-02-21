@@ -11,18 +11,17 @@ import (
 
 	"github.com/a2aproject/a2a-go/a2a"
 	"github.com/a2aproject/a2a-go/a2asrv"
-	"github.com/a2aproject/a2a-go/a2asrv/eventqueue"
 	"google.golang.org/genai"
 )
 
 // handleHelloWorld provides a context-aware greeting using Gemini.
-func (e *agentExecutor) handleHelloWorld(ctx context.Context, reqCtx *a2asrv.RequestContext, q eventqueue.Queue, input string) error {
+func (e *agentExecutor) handleHelloWorld(ctx context.Context, execCtx *a2asrv.ExecutorContext, yield func(a2a.Event, error) bool, input string) error {
 	var textResponse string
 	if e.genaiClient != nil {
 		prompt := fmt.Sprintf("The user said %q. Respond with a friendly, professional greeting as an A2A agent. Keep it concise.", input)
 		resp, genErr := e.genaiClient.Models.GenerateContent(ctx, e.model, genai.Text(prompt), nil)
 		if genErr != nil {
-			log.Printf("[Task: %s] Gemini Error: %v", reqCtx.TaskID, genErr)
+			log.Printf("[Task: %s] Gemini Error: %v", execCtx.TaskID, genErr)
 			textResponse = "Hello! (Gemini error, fallback)"
 		} else if len(resp.Candidates) > 0 && len(resp.Candidates[0].Content.Parts) > 0 {
 			textResponse = resp.Candidates[0].Content.Parts[0].Text
@@ -31,65 +30,69 @@ func (e *agentExecutor) handleHelloWorld(ctx context.Context, reqCtx *a2asrv.Req
 	if textResponse == "" {
 		textResponse = "Hello from the Simple A2A Server!"
 	}
-	if err := q.Write(ctx, a2a.NewMessageForTask(a2a.MessageRoleAgent, reqCtx, a2a.TextPart{Text: textResponse})); err != nil {
-		return err
-	}
-	// Finalize Task to ensure ID propagation
-	return e.finalizeTask(ctx, reqCtx, q)
+	
+	yield(a2a.NewMessageForTask(a2a.MessageRoleAgent, execCtx, a2a.NewTextPart(textResponse)), nil)
+	return nil
 }
 
 // handleEcho simple echoes the user input.
-func (e *agentExecutor) handleEcho(ctx context.Context, reqCtx *a2asrv.RequestContext, q eventqueue.Queue, input string) error {
-	if err := q.Write(ctx, a2a.NewMessageForTask(a2a.MessageRoleAgent, reqCtx, a2a.TextPart{Text: fmt.Sprintf("You said: %s", input)})); err != nil {
-		return err
-	}
-	return e.finalizeTask(ctx, reqCtx, q)
+func (e *agentExecutor) handleEcho(ctx context.Context, execCtx *a2asrv.ExecutorContext, yield func(a2a.Event, error) bool, input string) error {
+	yield(a2a.NewMessageForTask(a2a.MessageRoleAgent, execCtx, a2a.NewTextPart(fmt.Sprintf("You said: %s", input))), nil)
+	return nil
 }
 
 // handleAdminEcho echoes input only if the user is authenticated as Admin.
-func (e *agentExecutor) handleAdminEcho(ctx context.Context, reqCtx *a2asrv.RequestContext, q eventqueue.Queue, input string) error {
+func (e *agentExecutor) handleAdminEcho(ctx context.Context, execCtx *a2asrv.ExecutorContext, yield func(a2a.Event, error) bool, input string) error {
 	callCtx, ok := a2asrv.CallContextFrom(ctx)
 	if !ok {
-		return q.Write(ctx, a2a.NewMessageForTask(a2a.MessageRoleAgent, reqCtx, a2a.TextPart{Text: "Error: Call context missing."}))
+		yield(a2a.NewMessageForTask(a2a.MessageRoleAgent, execCtx, a2a.NewTextPart("Error: Call context missing.")), nil)
+		return nil
 	}
-	if err := q.Write(ctx, a2a.NewMessageForTask(a2a.MessageRoleAgent, reqCtx, a2a.TextPart{Text: fmt.Sprintf("Admin %s says: %s", callCtx.User.Name(), input)})); err != nil {
-		return err
-	}
-	return e.finalizeTask(ctx, reqCtx, q)
+	
+	yield(a2a.NewMessageForTask(a2a.MessageRoleAgent, execCtx, a2a.NewTextPart(fmt.Sprintf("Admin %s says: %s", callCtx.User.Name, input))), nil)
+	return nil
 }
 
 // handleStatefulInteraction manages long-running research or chat sessions via the Interactions API.
-func (e *agentExecutor) handleStatefulInteraction(ctx context.Context, reqCtx *a2asrv.RequestContext, q eventqueue.Queue, input string, isResearch bool) error {
+func (e *agentExecutor) handleStatefulInteraction(ctx context.Context, execCtx *a2asrv.ExecutorContext, yield func(a2a.Event, error) bool, input string, isResearch bool) error {
 	if e.interactionsClient == nil {
-		return q.Write(ctx, a2a.NewMessageForTask(a2a.MessageRoleAgent, reqCtx, a2a.TextPart{Text: "Stateful logic is unavailable: Interactions API key not configured."}))
+		yield(a2a.NewMessageForTask(a2a.MessageRoleAgent, execCtx, a2a.NewTextPart("Stateful logic is unavailable: Interactions API key not configured.")), nil)
+		return nil
 	}
 
 	// Session Recovery logic
 	var prevInteractionID string
-	if reqCtx.StoredTask != nil && reqCtx.StoredTask.Metadata != nil {
-		if val, ok := reqCtx.StoredTask.Metadata["gemini_interaction_id"].(string); ok {
+	if execCtx.StoredTask != nil && execCtx.StoredTask.Metadata != nil {
+		if val, ok := execCtx.StoredTask.Metadata["gemini_interaction_id"].(string); ok {
 			prevInteractionID = val
 		}
 	}
 	if prevInteractionID == "" {
-		for _, related := range reqCtx.RelatedTasks {
+		for _, related := range execCtx.RelatedTasks {
 			if related.Metadata != nil {
 				if val, ok := related.Metadata["gemini_interaction_id"].(string); ok {
 					prevInteractionID = val
-					log.Printf("[Task: %s] Found Gemini session from referenced task: %s", reqCtx.TaskID, related.ID)
+					log.Printf("[Task: %s] Found Gemini session from referenced task: %s", execCtx.TaskID, related.ID)
 					break
 				}
 			}
 		}
 	}
 
+	// Always make this stateful (create a task if it doesn't exist)
+	if execCtx.StoredTask == nil {
+		if !yield(a2a.NewSubmittedTask(execCtx, execCtx.Message), nil) {
+			return nil
+		}
+	}
+
 	agent := ""
 	if isResearch {
 		agent = "deep-research-pro-preview-12-2025"
-		log.Printf("[Task: %s] Starting Deep Research for: %q", reqCtx.TaskID, input)
-		q.Write(ctx, a2a.NewStatusUpdateEvent(reqCtx, a2a.TaskStateWorking, a2a.NewMessageForTask(a2a.MessageRoleAgent, reqCtx, a2a.TextPart{Text: "Initializing Deep Research Agent..."})))
+		log.Printf("[Task: %s] Starting Deep Research for: %q", execCtx.TaskID, input)
+		yield(a2a.NewStatusUpdateEvent(execCtx, a2a.TaskStateWorking, a2a.NewMessageForTask(a2a.MessageRoleAgent, execCtx, a2a.NewTextPart("Initializing Deep Research Agent..."))), nil)
 	} else {
-		log.Printf("[Task: %s] Starting Chat for: %q", reqCtx.TaskID, input)
+		log.Printf("[Task: %s] Starting Chat for: %q", execCtx.TaskID, input)
 	}
 
 	req := &interactions.InteractionRequest{
@@ -105,15 +108,16 @@ func (e *agentExecutor) handleStatefulInteraction(ctx context.Context, reqCtx *a
 
 	resp, err := e.interactionsClient.Create(ctx, req)
 	if err != nil {
-		log.Printf("[Task: %s] Interactions API Error: %v", reqCtx.TaskID, err)
-		return q.Write(ctx, a2a.NewMessageForTask(a2a.MessageRoleAgent, reqCtx, a2a.TextPart{Text: fmt.Sprintf("Failed to start interaction: %v", err)}))
+		log.Printf("[Task: %s] Interactions API Error: %v", execCtx.TaskID, err)
+		yield(a2a.NewMessageForTask(a2a.MessageRoleAgent, execCtx, a2a.NewTextPart(fmt.Sprintf("Failed to start interaction: %v", err))), nil)
+		return nil
 	}
 
 	// Update Task Metadata with new Interaction ID
-	if reqCtx.Metadata == nil {
-		reqCtx.Metadata = make(map[string]any)
+	if execCtx.Metadata == nil {
+		execCtx.Metadata = make(map[string]any)
 	}
-	reqCtx.Metadata["gemini_interaction_id"] = resp.ID
+	execCtx.Metadata["gemini_interaction_id"] = resp.ID
 
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
@@ -129,7 +133,7 @@ func (e *agentExecutor) handleStatefulInteraction(ctx context.Context, reqCtx *a
 				continue
 			}
 
-			log.Printf("[Task: %s] Interaction %s status: %s", reqCtx.TaskID, resp.ID, current.Status)
+			log.Printf("[Task: %s] Interaction %s status: %s", execCtx.TaskID, resp.ID, current.Status)
 			status := strings.ToLower(current.Status)
 			if status != "working" && status != "in_progress" && status != "pending" {
 				finalResp = current
@@ -137,8 +141,8 @@ func (e *agentExecutor) handleStatefulInteraction(ctx context.Context, reqCtx *a
 			}
 
 			if isResearch {
-				statusMsg := a2a.NewMessageForTask(a2a.MessageRoleAgent, reqCtx, a2a.TextPart{Text: fmt.Sprintf("Deep Research in progress (Status: %s)...", current.Status)})
-				q.Write(ctx, a2a.NewStatusUpdateEvent(reqCtx, a2a.TaskStateWorking, statusMsg))
+				statusMsg := a2a.NewMessageForTask(a2a.MessageRoleAgent, execCtx, a2a.NewTextPart(fmt.Sprintf("Deep Research in progress (Status: %s)...", current.Status)))
+				yield(a2a.NewStatusUpdateEvent(execCtx, a2a.TaskStateWorking, statusMsg), nil)
 			}
 		}
 	}
@@ -149,7 +153,8 @@ Finished:
 		if finalResp != nil && finalResp.Error != nil {
 			errMsg = fmt.Sprintf("Interaction failed: %s", finalResp.Error.Message)
 		}
-		return q.Write(ctx, a2a.NewStatusUpdateEvent(reqCtx, a2a.TaskStateFailed, a2a.NewMessageForTask(a2a.MessageRoleAgent, reqCtx, a2a.TextPart{Text: errMsg})))
+		yield(a2a.NewStatusUpdateEvent(execCtx, a2a.TaskStateFailed, a2a.NewMessageForTask(a2a.MessageRoleAgent, execCtx, a2a.NewTextPart(errMsg))), nil)
+		return nil
 	}
 
 	var resultText string
@@ -162,19 +167,20 @@ Finished:
 	}
 
 	if isResearch {
-		artifactEvent := a2a.NewArtifactEvent(reqCtx, a2a.TextPart{Text: resultText})
+		artifactEvent := a2a.NewArtifactEvent(execCtx, a2a.NewTextPart(resultText))
 		artifactEvent.Artifact.Name = "Deep Research Report"
 		artifactEvent.Artifact.Description = fmt.Sprintf("Research result for: %s", input)
-		q.Write(ctx, artifactEvent)
+		yield(artifactEvent, nil)
+		yield(a2a.NewStatusUpdateEvent(execCtx, a2a.TaskStateCompleted, nil), nil)
 	} else {
-		q.Write(ctx, a2a.NewMessageForTask(a2a.MessageRoleAgent, reqCtx, a2a.TextPart{Text: resultText}))
+		yield(a2a.NewStatusUpdateEvent(execCtx, a2a.TaskStateCompleted, a2a.NewMessageForTask(a2a.MessageRoleAgent, execCtx, a2a.NewTextPart(resultText))), nil)
 	}
 
-	return e.finalizeTask(ctx, reqCtx, q)
+	return nil
 }
 
 // handleSummarize handles the summarization of input or referenced task artifacts.
-func (e *agentExecutor) handleSummarize(ctx context.Context, reqCtx *a2asrv.RequestContext, q eventqueue.Queue, input string) error {
+func (e *agentExecutor) handleSummarize(ctx context.Context, execCtx *a2asrv.ExecutorContext, yield func(a2a.Event, error) bool, input string) error {
 	var contentToSummarize string
 	sourceDescription := "direct input"
 
@@ -185,8 +191,8 @@ func (e *agentExecutor) handleSummarize(ctx context.Context, reqCtx *a2asrv.Requ
 		for _, artifact := range task.Artifacts {
 			if artifact.Name == "Deep Research Report" {
 				for _, part := range artifact.Parts {
-					if tp, ok := part.(a2a.TextPart); ok {
-						return tp.Text
+					if text, ok := part.Content.(a2a.Text); ok {
+						return string(text)
 					}
 				}
 			}
@@ -194,11 +200,11 @@ func (e *agentExecutor) handleSummarize(ctx context.Context, reqCtx *a2asrv.Requ
 		return ""
 	}
 
-	if report := findReport(reqCtx.StoredTask); report != "" {
+	if report := findReport(execCtx.StoredTask); report != "" {
 		contentToSummarize = report
 		sourceDescription = "Task history"
-	} else if len(reqCtx.RelatedTasks) > 0 {
-		for _, related := range reqCtx.RelatedTasks {
+	} else if len(execCtx.RelatedTasks) > 0 {
+		for _, related := range execCtx.RelatedTasks {
 			if report := findReport(related); report != "" {
 				contentToSummarize = report
 				sourceDescription = fmt.Sprintf("Referenced Task (%s)", related.ID)
@@ -207,18 +213,18 @@ func (e *agentExecutor) handleSummarize(ctx context.Context, reqCtx *a2asrv.Requ
 		}
 	}
 
-	if contentToSummarize == "" && len(reqCtx.Message.ReferenceTasks) > 0 {
-		msg := a2a.NewMessageForTask(a2a.MessageRoleAgent, reqCtx, a2a.TextPart{
-			Text: fmt.Sprintf("Warning: I couldn't find a 'Deep Research Report' in the referenced task(s). Please check the Task ID: %v", reqCtx.Message.ReferenceTasks),
-		})
-		q.Write(ctx, msg)
-		return e.finalizeTask(ctx, reqCtx, q)
+	if contentToSummarize == "" && len(execCtx.Message.ReferenceTasks) > 0 {
+		msg := a2a.NewMessageForTask(a2a.MessageRoleAgent, execCtx, a2a.NewTextPart(
+			fmt.Sprintf("Warning: I couldn't find a 'Deep Research Report' in the referenced task(s). Please check the Task ID: %v", execCtx.Message.ReferenceTasks),
+		))
+		yield(msg, nil)
+		return e.finalizeTask(ctx, execCtx, yield)
 	}
 
 	if contentToSummarize == "" {
 		contentToSummarize = input
 	}
-	log.Printf("[Task: %s] Summarizing from %s", reqCtx.TaskID, sourceDescription)
+	log.Printf("[Task: %s] Summarizing from %s", execCtx.TaskID, sourceDescription)
 
 	var summary string
 	if e.genaiClient != nil {
@@ -233,15 +239,13 @@ func (e *agentExecutor) handleSummarize(ctx context.Context, reqCtx *a2asrv.Requ
 		summary = "Summary unavailable."
 	}
 
-	if err := q.Write(ctx, a2a.NewMessageForTask(a2a.MessageRoleAgent, reqCtx, a2a.TextPart{Text: summary})); err != nil {
-		return err
-	}
-	return e.finalizeTask(ctx, reqCtx, q)
+	yield(a2a.NewMessageForTask(a2a.MessageRoleAgent, execCtx, a2a.NewTextPart(summary)), nil)
+	return nil
 }
 
 // finalizeTask sends a terminal status update to complete an A2A Task.
-func (e *agentExecutor) finalizeTask(ctx context.Context, reqCtx *a2asrv.RequestContext, q eventqueue.Queue) error {
-	status := a2a.NewStatusUpdateEvent(reqCtx, a2a.TaskStateCompleted, nil)
-	status.Final = true
-	return q.Write(ctx, status)
+func (e *agentExecutor) finalizeTask(ctx context.Context, execCtx *a2asrv.ExecutorContext, yield func(a2a.Event, error) bool) error {
+	status := a2a.NewStatusUpdateEvent(execCtx, a2a.TaskStateCompleted, nil)
+	yield(status, nil)
+	return nil
 }

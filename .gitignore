@@ -48,7 +48,4 @@ docs/gemini*.png
 # Allow core primers/explainers, but ignore blog post drafts
 docs/posts/
 
-
-
-
-
+research_results/
