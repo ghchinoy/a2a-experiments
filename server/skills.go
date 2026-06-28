@@ -158,10 +158,17 @@ Finished:
 	}
 
 	var resultText string
-	if len(finalResp.Outputs) > 0 {
+	if len(finalResp.Outputs) == 0 && len(finalResp.Steps) > 0 {
+		lastStep := finalResp.Steps[len(finalResp.Steps)-1]
+		if lastStep.Text != "" {
+			resultText = lastStep.Text
+		} else if len(lastStep.Content) > 0 {
+			resultText = lastStep.Content[0].Text
+		}
+	} else if len(finalResp.Outputs) > 0 {
 		if finalResp.Outputs[0].Text != "" {
 			resultText = finalResp.Outputs[0].Text
-		} else if len(finalResp.Outputs[0].Content) > 0 {
+		} else if len(finalResp.Outputs[0].Content) > 0 { // Change .Parts to .Content
 			resultText = finalResp.Outputs[0].Content[0].Text
 		}
 	}

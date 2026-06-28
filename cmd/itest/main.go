@@ -72,8 +72,13 @@ func main() {
 			rawJSON, _ := json.MarshalIndent(current, "", "  ")
 			fmt.Printf("Raw JSON:\n%s\n", string(rawJSON))
 
-			if len(current.Outputs) > 0 {
-				for i, content := range current.Outputs {
+			outputs := current.Outputs
+			if len(outputs) == 0 && len(current.Steps) > 0 {
+				outputs = current.Steps
+			}
+
+			if len(outputs) > 0 {
+				for i, content := range outputs {
 					fmt.Printf("Output %d (Type: %s):\n", i, content.Type)
 					if content.Text != "" {
 						fmt.Printf("  Text: %s\n", content.Text)
