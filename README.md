@@ -15,7 +15,7 @@ This project is an experimental blueprint for building stateful, resilient A2A (
 
 - **Hybrid Server**: An A2A + HTTP agent featuring natural language intent detection, auth-gated skills, and a shared persistent TaskStore. Fully compliant with **A2A Protocol v1.0**.
 - **Cobra CLI (`a2acli`)**: *(Deprecated)* A professional developer tool for discovering Agent Cards and invoking skills with streaming feedback. **Note: The client in this repo is deprecated. Please use the standalone client at [github.com/ghchinoy/a2acli](https://github.com/ghchinoy/a2acli).**
-- **Interactions Library**: A custom Go implementation of the Gemini Interactions REST API, supporting stateful turns and background execution.
+- **Interactions Library ([cloud-interactions-go](https://github.com/ghchinoy/cloud-interactions-go))**: A specialized external Go client library for the Gemini and Vertex AI Interactions REST API, supporting stateful turns, background execution, and Server-Sent Events (SSE).
 - **`itest` Utility**: A direct CLI tool for verifying Gemini Interactions API behavior independent of the A2A layer.
 
 ## 🚀 Prerequisites
@@ -87,6 +87,5 @@ To minimize boilerplate and maximize flexibility, this project follows the **Ski
 
 - `server/`: Modular A2A server implementation (`main.go`, `skills.go`, `auth.go`).
 - `client/`: *(Deprecated)* Legacy Cobra CLI implementation. Use [ghchinoy/a2acli](https://github.com/ghchinoy/a2acli) instead.
-- `pkg/interactions/`: Go library for Gemini Interactions API.
-- `cmd/itest/`: Interactions API verification tool.
+- `cmd/itest/`: Interactions API verification tool (powered by the external `cloud-interactions-go` library).
 - `docs/`: Architectural documentation, diagrams, and scenarios.
