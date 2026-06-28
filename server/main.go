@@ -10,11 +10,11 @@ import (
 	"os"
 	"strings"
 
-	"a2a-simple/pkg/interactions"
+	"github.com/ghchinoy/cloud-interactions-go"
 
-	"github.com/a2aproject/a2a-go/a2a"
-	"github.com/a2aproject/a2a-go/a2asrv"
-	"github.com/a2aproject/a2a-go/a2asrv/taskstore"
+	"github.com/a2aproject/a2a-go/v2/a2a"
+	"github.com/a2aproject/a2a-go/v2/a2asrv"
+	"github.com/a2aproject/a2a-go/v2/a2asrv/taskstore"
 	"github.com/joho/godotenv"
 	"google.golang.org/genai"
 )
@@ -131,7 +131,7 @@ func main() {
 
 	var iClient *interactions.Client
 	if interactionsKey != "" {
-		iClient = interactions.NewClient(interactionsKey)
+		iClient = interactions.NewClient("https://generativelanguage.googleapis.com/v1beta/interactions").WithAPIKey(interactionsKey)
 	}
 
 	if model == "" {

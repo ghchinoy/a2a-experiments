@@ -5,7 +5,7 @@ import (
 	"log"
 	"strings"
 
-	"github.com/a2aproject/a2a-go/a2asrv"
+	"github.com/a2aproject/a2a-go/v2/a2asrv"
 )
 
 // authInterceptor implements [a2asrv.CallInterceptor] to handle identity verification.

@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
-	"a2a-simple/pkg/interactions"
+	"github.com/ghchinoy/cloud-interactions-go"
 
-	"github.com/a2aproject/a2a-go/a2a"
-	"github.com/a2aproject/a2a-go/a2asrv"
+	"github.com/a2aproject/a2a-go/v2/a2a"
+	"github.com/a2aproject/a2a-go/v2/a2asrv"
 	"google.golang.org/genai"
 )
 
@@ -161,8 +161,8 @@ Finished:
 	if len(finalResp.Outputs) > 0 {
 		if finalResp.Outputs[0].Text != "" {
 			resultText = finalResp.Outputs[0].Text
-		} else if len(finalResp.Outputs[0].Parts) > 0 {
-			resultText = finalResp.Outputs[0].Parts[0].Text
+		} else if len(finalResp.Outputs[0].Content) > 0 {
+			resultText = finalResp.Outputs[0].Content[0].Text
 		}
 	}
 

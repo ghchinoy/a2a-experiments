@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"a2a-simple/pkg/interactions"
+	"github.com/ghchinoy/cloud-interactions-go"
 	"github.com/joho/godotenv"
 )
 
@@ -20,7 +20,7 @@ func main() {
 		log.Fatal("GEMINI_API_KEY not set in .env")
 	}
 
-	client := interactions.NewClient(apiKey)
+	client := interactions.NewClient("https://generativelanguage.googleapis.com/v1beta/interactions").WithAPIKey(apiKey)
 	ctx := context.Background()
 
 	input := "Research the history of the Go language"
@@ -74,11 +74,11 @@ func main() {
 
 			if len(current.Outputs) > 0 {
 				for i, content := range current.Outputs {
-					fmt.Printf("Output %d (Role: %s):\n", i, content.Role)
+					fmt.Printf("Output %d (Type: %s):\n", i, content.Type)
 					if content.Text != "" {
 						fmt.Printf("  Text: %s\n", content.Text)
 					}
-					for j, part := range content.Parts {
+					for j, part := range content.Content {
 						fmt.Printf("  Part %d Text: %s\n", j, part.Text)
 					}
 				}
