@@ -4,8 +4,10 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"iter"
-	"log"
+	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -16,6 +18,7 @@ import (
 	"github.com/a2aproject/a2a-go/v2/a2asrv"
 	"github.com/a2aproject/a2a-go/v2/a2asrv/push"
 	"github.com/a2aproject/a2a-go/v2/a2asrv/taskstore"
+	a2alog "github.com/a2aproject/a2a-go/v2/log"
 	"github.com/joho/godotenv"
 	"google.golang.org/genai"
 )
@@ -61,13 +64,13 @@ func (e *agentExecutor) Execute(ctx context.Context, execCtx *a2asrv.ExecutorCon
 			}
 		}
 
-		log.Printf("[Task: %s] Dispatching to Skill: %q", execCtx.TaskID, selectedSkillID)
+		slog.Info("dispatching skill", "task", execCtx.TaskID, "skill", selectedSkillID)
 
 		// Authentication Gating
 		if selectedSkillID == "admin_echo" {
 			callCtx, ok := a2asrv.CallContextFrom(ctx)
 			if !ok || !callCtx.User.Authenticated {
-				log.Printf("[Task: %s] Unauthorized access attempt to %q", execCtx.TaskID, selectedSkillID)
+				slog.Warn("unauthorized skill access", "task", execCtx.TaskID, "skill", selectedSkillID)
 				event := a2a.NewStatusUpdateEvent(execCtx, a2a.TaskStateRejected, a2a.NewMessageForTask(a2a.MessageRoleAgent, execCtx, a2a.NewTextPart("Unauthorized: this skill requires a valid bearer token.")))
 				yield(event, nil)
 				return
@@ -92,7 +95,7 @@ func (e *agentExecutor) Execute(ctx context.Context, execCtx *a2asrv.ExecutorCon
 		case "multimodal_echo":
 			err = e.handleMultimodalEcho(ctx, execCtx, yield)
 		default:
-			log.Printf("[Task: %s] Skill %q not found.", execCtx.TaskID, selectedSkillID)
+			slog.Warn("skill not found", "task", execCtx.TaskID, "skill", selectedSkillID)
 			response := a2a.NewMessageForTask(a2a.MessageRoleAgent, execCtx, a2a.NewTextPart(fmt.Sprintf("Skill %q not found.", selectedSkillID)))
 			yield(response, nil)
 		}
@@ -106,17 +109,55 @@ func (e *agentExecutor) Execute(ctx context.Context, execCtx *a2asrv.ExecutorCon
 // Cancel handles A2A task cancellation requests.
 func (*agentExecutor) Cancel(ctx context.Context, execCtx *a2asrv.ExecutorContext) iter.Seq2[a2a.Event, error] {
 	return func(yield func(a2a.Event, error) bool) {
-		log.Printf("[Task: %s] Cancellation requested", execCtx.TaskID)
+		slog.Info("task cancellation requested", "task", execCtx.TaskID)
 	}
 }
 
-var port = flag.Int("port", 9001, "Port for the A2A server")
+var (
+	port    = flag.Int("port", 9001, "Port for the A2A server")
+	level   = flag.String("level", "info", "Log level: debug, info, warn, error")
+	logFile = flag.String("log-file", "", "Path to log file (default: stderr only)")
+	payload = flag.Bool("payload", false, "Log request/response payloads")
+)
 
 func main() {
 	flag.Parse()
 	godotenv.Load()
 
-	// 1. Initialize Core Dependencies
+	// 1. Configure structured logging.
+	var slogLevel slog.Level
+	switch *level {
+	case "debug":
+		slogLevel = slog.LevelDebug
+	case "warn":
+		slogLevel = slog.LevelWarn
+	case "error":
+		slogLevel = slog.LevelError
+	default:
+		slogLevel = slog.LevelInfo
+	}
+
+	var output io.Writer = os.Stderr
+	if *logFile != "" {
+		f, err := os.OpenFile(*logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+		if err != nil {
+			slog.Error("failed to open log file", "path", *logFile, "error", err)
+			os.Exit(1)
+		}
+		defer f.Close()
+		output = io.MultiWriter(os.Stderr, f)
+	}
+
+	logger := slog.New(a2alog.AttachFormatter(
+		slog.NewTextHandler(output, &slog.HandlerOptions{
+			Level:     slogLevel,
+			AddSource: slogLevel == slog.LevelDebug,
+		}),
+		a2alog.DefaultA2ATypeFormatter,
+	))
+	slog.SetDefault(logger)
+
+	// 2. Initialize core dependencies.
 	project := os.Getenv("GOOGLE_CLOUD_PROJECT")
 	location := os.Getenv("GOOGLE_CLOUD_LOCATION")
 	model := os.Getenv("GEMINI_MODEL")
@@ -125,11 +166,15 @@ func main() {
 	var gClient *genai.Client
 	if project != "" && location != "" {
 		ctx := context.Background()
-		gClient, _ = genai.NewClient(ctx, &genai.ClientConfig{
+		var err error
+		gClient, err = genai.NewClient(ctx, &genai.ClientConfig{
 			Project:  project,
 			Location: location,
 			Backend:  genai.BackendVertexAI,
 		})
+		if err != nil {
+			logger.Error("failed to create GenAI client", "error", err)
+		}
 	}
 
 	var iClient *interactions.Client
@@ -141,15 +186,15 @@ func main() {
 		model = "gemini-2.0-flash"
 	}
 
-	// 2. Setup Shared Persistence (Explicit Store Pattern)
+	// 3. Setup shared persistence (Explicit Store Pattern).
 	store := taskstore.NewInMemory(&taskstore.InMemoryStoreConfig{Authenticator: a2asrv.NewTaskStoreAuthenticator()})
 	pushStore := push.NewInMemoryStore()
 	pushSender := push.NewHTTPPushSender(nil)
 
-	// 3. Define the Agent Identity
+	// 4. Define the agent identity.
 	agentCard := &a2a.AgentCard{
-		Name:               "Refactored A2A Agent",
-		Description:        "A clean, modular A2A service example",
+		Name:        "Refactored A2A Agent",
+		Description: "A clean, modular A2A service example",
 		SupportedInterfaces: []*a2a.AgentInterface{
 			a2a.NewAgentInterface(fmt.Sprintf("http://127.0.0.1:%d/invoke", *port), a2a.TransportProtocolJSONRPC),
 		},
@@ -170,23 +215,38 @@ func main() {
 		},
 	}
 
-	// 4. Wire up the A2A Request Handler
+	// 5. Wire up the A2A request handler.
+	loggingInterceptor := a2asrv.NewLoggingInterceptor(&a2asrv.LoggingConfig{
+		LogPayload: *payload,
+	})
 	executor := &agentExecutor{gClient, model, iClient}
 	requestHandler := a2asrv.NewHandler(
 		executor,
-		a2asrv.WithCallInterceptors(&authInterceptor{}),
+		a2asrv.WithLogger(logger),
+		a2asrv.WithCallInterceptors(loggingInterceptor, &authInterceptor{}),
 		a2asrv.WithTaskStore(store),
 		a2asrv.WithExecutorContextInterceptor(&a2asrv.ReferencedTasksLoader{Store: store}),
 		a2asrv.WithPushNotifications(pushStore, pushSender),
 	)
 
-	// 5. Start HTTP Server
+	// 6. Bind and start the HTTP server.
+	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", *port))
+	if err != nil {
+		logger.Error("failed to bind port", "port", *port, "error", err)
+		os.Exit(1)
+	}
 	mux := http.NewServeMux()
 	mux.Handle("/invoke", a2asrv.NewJSONRPCHandler(requestHandler))
 	mux.Handle(a2asrv.WellKnownAgentCardPath, a2asrv.NewStaticAgentCardHandler(agentCard))
 
-	log.Printf("A2A Server (Protocol %s) starting on :%d", a2a.Version, *port)
-	if err := http.ListenAndServe(fmt.Sprintf(":%d", *port), mux); err != nil {
-		log.Fatal(err)
+	logger.Info("A2A server starting",
+		"protocol", a2a.Version,
+		"addr", listener.Addr().String(),
+		"level", *level,
+		"payload_logging", *payload,
+	)
+	if err := http.Serve(listener, mux); err != nil {
+		logger.Error("server stopped", "error", err)
+		os.Exit(1)
 	}
 }

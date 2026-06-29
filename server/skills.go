@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -22,7 +22,7 @@ func (e *agentExecutor) handleHelloWorld(ctx context.Context, execCtx *a2asrv.Ex
 		prompt := fmt.Sprintf("The user said %q. Respond with a friendly, professional greeting as an A2A agent. Keep it concise.", input)
 		resp, genErr := e.genaiClient.Models.GenerateContent(ctx, e.model, genai.Text(prompt), nil)
 		if genErr != nil {
-			log.Printf("[Task: %s] Gemini Error: %v", execCtx.TaskID, genErr)
+			slog.Warn("gemini error in hello_world", "task", execCtx.TaskID, "error", genErr)
 			textResponse = "Hello! (Gemini error, fallback)"
 		} else if len(resp.Candidates) > 0 && len(resp.Candidates[0].Content.Parts) > 0 {
 			textResponse = resp.Candidates[0].Content.Parts[0].Text
@@ -73,7 +73,7 @@ func (e *agentExecutor) handleStatefulInteraction(ctx context.Context, execCtx *
 			if related.Metadata != nil {
 				if val, ok := related.Metadata["gemini_interaction_id"].(string); ok {
 					prevInteractionID = val
-					log.Printf("[Task: %s] Found Gemini session from referenced task: %s", execCtx.TaskID, related.ID)
+					slog.Debug("recovered gemini session from referenced task", "task", execCtx.TaskID, "source_task", related.ID)
 					break
 				}
 			}
@@ -90,10 +90,10 @@ func (e *agentExecutor) handleStatefulInteraction(ctx context.Context, execCtx *
 	agent := ""
 	if isResearch {
 		agent = "deep-research-pro-preview-12-2025"
-		log.Printf("[Task: %s] Starting Deep Research for: %q", execCtx.TaskID, input)
-		yield(a2a.NewStatusUpdateEvent(execCtx, a2a.TaskStateWorking, a2a.NewMessageForTask(a2a.MessageRoleAgent, execCtx, a2a.NewTextPart("Initializing Deep Research Agent..."))), nil)
+		slog.Info("starting deep research", "task", execCtx.TaskID, "input", input)
+			yield(a2a.NewStatusUpdateEvent(execCtx, a2a.TaskStateWorking, a2a.NewMessageForTask(a2a.MessageRoleAgent, execCtx, a2a.NewTextPart("Initializing Deep Research Agent..."))), nil)
 	} else {
-		log.Printf("[Task: %s] Starting Chat for: %q", execCtx.TaskID, input)
+		slog.Info("starting chat", "task", execCtx.TaskID, "input", input)
 	}
 
 	req := &interactions.InteractionRequest{
@@ -109,7 +109,7 @@ func (e *agentExecutor) handleStatefulInteraction(ctx context.Context, execCtx *
 
 	resp, err := e.interactionsClient.Create(ctx, req)
 	if err != nil {
-		log.Printf("[Task: %s] Interactions API Error: %v", execCtx.TaskID, err)
+		slog.Error("interactions API error", "task", execCtx.TaskID, "error", err)
 		yield(a2a.NewMessageForTask(a2a.MessageRoleAgent, execCtx, a2a.NewTextPart(fmt.Sprintf("Failed to start interaction: %v", err))), nil)
 		return nil
 	}
@@ -134,7 +134,7 @@ func (e *agentExecutor) handleStatefulInteraction(ctx context.Context, execCtx *
 				continue
 			}
 
-			log.Printf("[Task: %s] Interaction %s status: %s", execCtx.TaskID, resp.ID, current.Status)
+			slog.Debug("interaction poll", "task", execCtx.TaskID, "interaction", resp.ID, "status", current.Status)
 			status := strings.ToLower(current.Status)
 			if status != "working" && status != "in_progress" && status != "pending" {
 				finalResp = current
@@ -232,7 +232,7 @@ func (e *agentExecutor) handleSummarize(ctx context.Context, execCtx *a2asrv.Exe
 	if contentToSummarize == "" {
 		contentToSummarize = input
 	}
-	log.Printf("[Task: %s] Summarizing from %s", execCtx.TaskID, sourceDescription)
+	slog.Info("summarizing", "task", execCtx.TaskID, "source", sourceDescription)
 
 	var summary string
 	if e.genaiClient != nil {
@@ -326,7 +326,7 @@ func (e *agentExecutor) handleMultimodalEcho(ctx context.Context, execCtx *a2asr
 			summary = append(summary, fmt.Sprintf("part %d: URLPart mediaType=%s url=%s", i, part.MediaType, string(content)))
 
 		default:
-			log.Printf("[Task: %s] multimodal_echo: unknown part type %T at index %d", execCtx.TaskID, part.Content, i)
+			slog.Warn("multimodal_echo: unknown part type", "task", execCtx.TaskID, "index", i, "type", fmt.Sprintf("%T", part.Content))
 			summary = append(summary, fmt.Sprintf("part %d: unknown type %T (skipped)", i, part.Content))
 		}
 	}
