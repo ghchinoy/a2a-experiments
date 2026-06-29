@@ -14,6 +14,7 @@ import (
 
 	"github.com/a2aproject/a2a-go/v2/a2a"
 	"github.com/a2aproject/a2a-go/v2/a2asrv"
+	"github.com/a2aproject/a2a-go/v2/a2asrv/push"
 	"github.com/a2aproject/a2a-go/v2/a2asrv/taskstore"
 	"github.com/joho/godotenv"
 	"google.golang.org/genai"
@@ -88,6 +89,8 @@ func (e *agentExecutor) Execute(ctx context.Context, execCtx *a2asrv.ExecutorCon
 			err = e.handleStatefulInteraction(ctx, execCtx, yield, textInput, false)
 		case "summarize":
 			err = e.handleSummarize(ctx, execCtx, yield, textInput)
+		case "multimodal_echo":
+			err = e.handleMultimodalEcho(ctx, execCtx, yield)
 		default:
 			log.Printf("[Task: %s] Skill %q not found.", execCtx.TaskID, selectedSkillID)
 			response := a2a.NewMessageForTask(a2a.MessageRoleAgent, execCtx, a2a.NewTextPart(fmt.Sprintf("Skill %q not found.", selectedSkillID)))
@@ -140,6 +143,8 @@ func main() {
 
 	// 2. Setup Shared Persistence (Explicit Store Pattern)
 	store := taskstore.NewInMemory(&taskstore.InMemoryStoreConfig{Authenticator: a2asrv.NewTaskStoreAuthenticator()})
+	pushStore := push.NewInMemoryStore()
+	pushSender := push.NewHTTPPushSender(nil)
 
 	// 3. Define the Agent Identity
 	agentCard := &a2a.AgentCard{
@@ -150,7 +155,7 @@ func main() {
 		},
 		DefaultInputModes:  []string{"text"},
 		DefaultOutputModes: []string{"text"},
-		Capabilities:       a2a.AgentCapabilities{Streaming: true},
+		Capabilities:       a2a.AgentCapabilities{Streaming: true, PushNotifications: true},
 		Skills: []a2a.AgentSkill{
 			{ID: "hello_world", Name: "Hello World", Description: "Friendly Gemini greeting"},
 			{ID: "echo", Name: "Echo", Description: "Stateless echo"},
@@ -158,6 +163,7 @@ func main() {
 			{ID: "ai_researcher", Name: "AI Researcher", Description: "Deep research via Interactions API"},
 			{ID: "summarize", Name: "Summarizer", Description: "Cross-task artifact summarization"},
 			{ID: "chat", Name: "Stateful Chat", Description: "Conversation with session history"},
+			{ID: "multimodal_echo", Name: "Multimodal Echo", Description: "Echoes all received message parts back as artifacts. Use to validate multi-modal message construction."},
 		},
 		SecuritySchemes: a2a.NamedSecuritySchemes{
 			"bearerAuth": a2a.HTTPAuthSecurityScheme{Scheme: "Bearer", BearerFormat: "JWT"},
@@ -171,6 +177,7 @@ func main() {
 		a2asrv.WithCallInterceptors(&authInterceptor{}),
 		a2asrv.WithTaskStore(store),
 		a2asrv.WithExecutorContextInterceptor(&a2asrv.ReferencedTasksLoader{Store: store}),
+		a2asrv.WithPushNotifications(pushStore, pushSender),
 	)
 
 	// 5. Start HTTP Server

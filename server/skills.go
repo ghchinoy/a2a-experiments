@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"strings"
@@ -254,5 +255,78 @@ func (e *agentExecutor) handleSummarize(ctx context.Context, execCtx *a2asrv.Exe
 func (e *agentExecutor) finalizeTask(ctx context.Context, execCtx *a2asrv.ExecutorContext, yield func(a2a.Event, error) bool) error {
 	status := a2a.NewStatusUpdateEvent(execCtx, a2a.TaskStateCompleted, nil)
 	yield(status, nil)
+	return nil
+}
+
+// handleMultimodalEcho inspects all received message parts and echoes each back as a
+// separate named artifact, preserving part type, mediaType, and content. It also emits
+// a final summary artifact listing all part types received.
+//
+// This skill is the server-side target for a2acli multi-modal input testing
+// (--parts / --json / --file / --data flags). Callers can assert round-trip fidelity
+// by inspecting the returned artifacts.
+func (e *agentExecutor) handleMultimodalEcho(_ context.Context, execCtx *a2asrv.ExecutorContext, yield func(a2a.Event, error) bool) error {
+	if execCtx.Message == nil || len(execCtx.Message.Parts) == 0 {
+		yield(a2a.NewMessageForTask(a2a.MessageRoleAgent, execCtx, a2a.NewTextPart("multimodal_echo: no parts received.")), nil)
+		return nil
+	}
+
+	var summary []string
+
+	for i, part := range execCtx.Message.Parts {
+		switch content := part.Content.(type) {
+
+		case a2a.Text:
+			ev := a2a.NewArtifactEvent(execCtx, a2a.NewTextPart("text: "+string(content)))
+			ev.Artifact.Name = fmt.Sprintf("part-%d-text", i)
+			ev.Artifact.Description = "Echoed TextPart"
+			yield(ev, nil)
+			summary = append(summary, fmt.Sprintf("part %d: TextPart (%d bytes)", i, len(content)))
+
+		case a2a.Data:
+			b, err := json.Marshal(content.Value)
+			if err != nil {
+				b = []byte(fmt.Sprintf("<marshal error: %v>", err))
+			}
+			mediaType := part.MediaType
+			if mediaType == "" {
+				mediaType = "application/json"
+			}
+			ev := a2a.NewArtifactEvent(execCtx, a2a.NewTextPart(string(b)))
+			ev.Artifact.Name = fmt.Sprintf("part-%d-data (%s)", i, mediaType)
+			ev.Artifact.Description = "Echoed DataPart"
+			yield(ev, nil)
+			summary = append(summary, fmt.Sprintf("part %d: DataPart mediaType=%s (%d bytes)", i, mediaType, len(b)))
+
+		case a2a.Raw:
+			rawPart := a2a.NewRawPart([]byte(content))
+			rawPart.MediaType = part.MediaType
+			ev := a2a.NewArtifactEvent(execCtx, rawPart)
+			ev.Artifact.Name = fmt.Sprintf("part-%d-raw", i)
+			ev.Artifact.Description = fmt.Sprintf("Echoed RawPart (mediaType=%s)", part.MediaType)
+			yield(ev, nil)
+			summary = append(summary, fmt.Sprintf("part %d: RawPart mediaType=%s (%d bytes)", i, part.MediaType, len(content)))
+
+		case a2a.URL:
+			urlPart := a2a.NewFileURLPart(content, part.MediaType)
+			ev := a2a.NewArtifactEvent(execCtx, urlPart)
+			ev.Artifact.Name = fmt.Sprintf("part-%d-url", i)
+			ev.Artifact.Description = fmt.Sprintf("Echoed URLPart (mediaType=%s)", part.MediaType)
+			yield(ev, nil)
+			summary = append(summary, fmt.Sprintf("part %d: URLPart mediaType=%s url=%s", i, part.MediaType, string(content)))
+
+		default:
+			log.Printf("[Task: %s] multimodal_echo: unknown part type %T at index %d", execCtx.TaskID, part.Content, i)
+			summary = append(summary, fmt.Sprintf("part %d: unknown type %T (skipped)", i, part.Content))
+		}
+	}
+
+	// Final summary artifact listing all part types received.
+	summaryText := fmt.Sprintf("Received %d part(s):\n%s", len(execCtx.Message.Parts), strings.Join(summary, "\n"))
+	summaryEv := a2a.NewArtifactEvent(execCtx, a2a.NewTextPart(summaryText))
+	summaryEv.Artifact.Name = "summary"
+	summaryEv.Artifact.Description = "Part-type summary for round-trip validation"
+	yield(summaryEv, nil)
+
 	return nil
 }
