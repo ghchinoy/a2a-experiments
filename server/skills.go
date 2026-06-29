@@ -265,7 +265,17 @@ func (e *agentExecutor) finalizeTask(ctx context.Context, execCtx *a2asrv.Execut
 // This skill is the server-side target for a2acli multi-modal input testing
 // (--parts / --json / --file / --data flags). Callers can assert round-trip fidelity
 // by inspecting the returned artifacts.
-func (e *agentExecutor) handleMultimodalEcho(_ context.Context, execCtx *a2asrv.ExecutorContext, yield func(a2a.Event, error) bool) error {
+func (e *agentExecutor) handleMultimodalEcho(ctx context.Context, execCtx *a2asrv.ExecutorContext, yield func(a2a.Event, error) bool) error {
+	// Required preamble: submit the task and transition to working state.
+	if execCtx.StoredTask == nil {
+		if !yield(a2a.NewSubmittedTask(execCtx, execCtx.Message), nil) {
+			return nil
+		}
+	}
+	if !yield(a2a.NewStatusUpdateEvent(execCtx, a2a.TaskStateWorking, nil), nil) {
+		return nil
+	}
+
 	if execCtx.Message == nil || len(execCtx.Message.Parts) == 0 {
 		yield(a2a.NewMessageForTask(a2a.MessageRoleAgent, execCtx, a2a.NewTextPart("multimodal_echo: no parts received.")), nil)
 		return nil
@@ -326,7 +336,8 @@ func (e *agentExecutor) handleMultimodalEcho(_ context.Context, execCtx *a2asrv.
 	summaryEv := a2a.NewArtifactEvent(execCtx, a2a.NewTextPart(summaryText))
 	summaryEv.Artifact.Name = "summary"
 	summaryEv.Artifact.Description = "Part-type summary for round-trip validation"
+	summaryEv.LastChunk = true
 	yield(summaryEv, nil)
 
-	return nil
+	return e.finalizeTask(ctx, execCtx, yield)
 }
