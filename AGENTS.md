@@ -31,7 +31,12 @@ bd create "Title" --type task --priority 2   # create a new issue
 Before considering a new A2A skill complete, verify all of the following (from GEMINI.md):
 
 - [ ] `Capabilities.Streaming` is `true` in the Agent Card
-- [ ] Stateful skills yield `a2a.NewSubmittedTask(...)` as the **first** event; stateless skills yield exactly one `a2a.Message`
+- [ ] **Stateful skills: `a2a.NewSubmittedTask(...)` is the very first `yield` call** — before any status updates, artifacts, or messages. Missing this causes "first event must be a Task" errors at the client.
+- [ ] **Stateful skills: `finalizeTask()` (or equivalent `TaskStateCompleted` event) is called at the end** — missing this causes the client to hang indefinitely waiting for a terminal state.
+- [ ] The final artifact sets `LastChunk = true` so the client knows the artifact stream is complete.
+- [ ] The skill handler takes `ctx context.Context` (not `_`) so it can be passed to `finalizeTask()` and other context-aware calls.
 - [ ] Long-polling loops emit `working` status heartbeats
 - [ ] Work products are returned as Artifacts (`a2a.Text` or `a2a.Data` parts), not Messages
 - [ ] Client-side transport timeout exceeds the maximum expected skill duration
+
+> **Post-mortem (a2a-simple-voh):** All four items above were caught by the a2acli agent during integration testing of `multimodal_echo`. The fix was 3666aa9.
