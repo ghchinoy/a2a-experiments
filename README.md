@@ -37,7 +37,7 @@ This project is an experimental blueprint for building stateful, resilient A2A (
 ### 1. Build and Start the Server
 
 ```bash
-go build -o bin/server ./server
+make server
 ./bin/server
 ```
 The server starts on `127.0.0.1:9001`.
@@ -85,7 +85,14 @@ To minimize boilerplate and maximize flexibility, this project follows the **Ski
 
 ## 📂 Project Structure
 
-- `server/`: Modular A2A server implementation (`main.go`, `skills.go`, `auth.go`).
+- `cmd/`: Multi-service layout of reference servers and utilities.
+  - `cmd/server/`: Modular A2A server implementation (`main.go`, `skills.go`).
+  - `cmd/itest/`: Interactions API verification tool (powered by the external `cloud-interactions-go` library).
+  - `cmd/grpc-echo/`: (New) Multi-transport echo reference server.
+  - `cmd/multimodal/`: (New) Kitchen-sink artifact/state producer reference server.
+  - `cmd/extended-card/`: (New) ExtendedAgentCard target reference server.
+- `internal/`: Shared helper packages.
+  - `internal/auth/`: Reusable authInterceptor.
+  - `internal/a2autil/`: Reusable skill execution helpers (e.g. task finalization).
 - `client/`: *(Deprecated)* Legacy Cobra CLI implementation. Use [ghchinoy/a2acli](https://github.com/ghchinoy/a2acli) instead.
-- `cmd/itest/`: Interactions API verification tool (powered by the external `cloud-interactions-go` library).
 - `docs/`: Architectural documentation, diagrams, and scenarios.

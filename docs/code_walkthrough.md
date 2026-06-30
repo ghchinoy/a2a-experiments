@@ -11,11 +11,11 @@ Before diving into files, remember the core flow:
 4.  **Skill** does work (maybe calling Gemini).
 5.  **Skill** streams updates back to the Client.
 
-## 2. The Server (`server/`)
+## 2. The Server (`cmd/server/`)
 
 The server is the heart of the agent. It is built using the standard `net/http` package and the `a2asrv` SDK.
 
-### Entry Point: `server/main.go`
+### Entry Point: `cmd/server/main.go`
 This file is the "wiring diagram." It doesn't contain business logic; it just connects components.
 
 *   **`agentExecutor` struct**: This holds the dependencies (Gemini client, Interactions client) that your skills need.
@@ -29,7 +29,7 @@ This file is the "wiring diagram." It doesn't contain business logic; it just co
     )
     ```
 
-### Business Logic: `server/skills.go`
+### Business Logic: `cmd/server/skills.go`
 This is where the actual work happens. Each function here corresponds to a "Skill" in the Agent Card.
 
 *   **`Execute` method**: This is the "Router." It looks at the user input and decides which function to call (`handleHelloWorld`, `handleStatefulInteraction`, etc.).
@@ -38,10 +38,10 @@ This is where the actual work happens. Each function here corresponds to a "Skil
     2.  **Call External API**: Use `interactionsClient` to talk to Google.
     3.  **Stream Updates**: Use `q.Write(ctx, event)` to send heartbeats back to the user.
 
-### Security: `server/auth.go`
+### Security: `internal/auth/auth.go`
 Refer to `docs/auth_flow.dot`. This file implements an **Interceptor**.
 
-*   **`authInterceptor`**: It sits *before* the handler.
+*   **`Interceptor`**: It sits *before* the handler.
 *   **`Before` method**: It checks the `Authorization` header. If valid, it populates `callCtx.User`. This allows skills (like `handleAdminEcho`) to check `callCtx.User.Authenticated()` later.
 
 ## 3. The Client (`client/`)
