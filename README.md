@@ -90,6 +90,7 @@ To minimize boilerplate and maximize flexibility, this project follows the **Ski
   - `cmd/itest/`: Interactions API verification tool (powered by the external `cloud-interactions-go` library).
   - `cmd/grpc-echo/`: (New) Multi-transport echo reference server.
   - `cmd/multimodal/`: (New) Kitchen-sink artifact/state producer reference server.
+  - `cmd/a2ui/`: (New) Dynamic user-interface A2UI v1.0 reference server.
   - `cmd/extended-card/`: (New) ExtendedAgentCard target reference server.
 - `internal/`: Shared helper packages.
   - `internal/auth/`: Reusable authInterceptor.
