@@ -7,7 +7,7 @@ require (
 	github.com/charmbracelet/bubbles v0.21.0
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0
-	github.com/ghchinoy/cloud-interactions-go v0.0.0
+	github.com/ghchinoy/cloud-interactions-go v0.1.3
 	github.com/joho/godotenv v1.5.1
 	github.com/spf13/cobra v1.10.2
 	google.golang.org/genai v1.43.0
@@ -51,9 +51,4 @@ require (
 	google.golang.org/genproto/googleapis/api v0.0.0-20260427160629-7cedc36a6bc4 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260427160629-7cedc36a6bc4 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
-)
-
-replace (
-	github.com/a2aproject/a2a-go/v2 => ../github/a2a-go
-	github.com/ghchinoy/cloud-interactions-go => ../cloud-interactions-go
 )
