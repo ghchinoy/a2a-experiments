@@ -9,14 +9,14 @@ See [GEMINI.md](GEMINI.md) for the full engineering standards, design patterns, 
 Before touching code, claim the issue:
 
 ```bash
-bd in-progress <id>   # claim before implementing
+bd update <id> --claim   # claim before implementing
 ```
 
 After implementing:
 
 ```bash
 bd close <id> --reason "..."   # close when done
-bd sync                         # sync at session end
+git push                        # sync at session end
 ```
 
 Other useful commands:

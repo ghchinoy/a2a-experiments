@@ -44,6 +44,7 @@ When adding a new A2A skill, the agent must verify:
 This project uses **bd (beads)** for issue tracking. 
 **Quick reference:**
 - `bd ready` - Find unblocked work.
+- `bd update <id> --claim` - Claim issue.
 - `bd create "Title" --type task --priority 2` - Create issue.
 - `bd close <id>` - Complete work.
-- `bd sync` - Sync with git (run at session end).
+- `git push` - Sync with git (run at session end).
