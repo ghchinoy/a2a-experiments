@@ -4,27 +4,18 @@ See [GEMINI.md](GEMINI.md) for the full engineering standards, design patterns, 
 
 ## Critical Workflow Rules
 
-### Issue Tracking (bd) — follow this order every time
+### Issue Tracking (bd)
 
-Before touching code, claim the issue:
+This project uses **bd (beads)** for issue tracking. Run `bd prime` for dynamic workflow context.
 
-```bash
-bd update <id> --claim   # claim before implementing
-```
+**Quick reference:**
+- `bd ready` - Find unblocked work
+- `bd update <id> --claim` - Claim issue before implementing
+- `bd create "Title" --type task --priority 2` - Create issue
+- `bd close <id> --reason "..."` - Close issue when done
+- `git push` - Sync at session end
 
-After implementing:
-
-```bash
-bd close <id> --reason "..."   # close when done
-git push                        # sync at session end
-```
-
-Other useful commands:
-
-```bash
-bd ready                                      # find unblocked work to pick up
-bd create "Title" --type task --priority 2   # create a new issue
-```
+For full workflow details and policy: `bd prime`
 
 ### Engineering Checklist for New Skills
 
