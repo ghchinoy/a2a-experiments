@@ -20,9 +20,9 @@ This scenario demonstrates how a single Task can span multiple messages to refin
 
 3.  **Follow Up (After Completion)**:
     ```bash
-    ./bin/client invoke "Explain the rationale behind the lack of generics until 1.18" --task <TASK_ID>
+    ./bin/client invoke "Explain the rationale behind the lack of generics until 1.18" --ref <TASK_ID>
     ```
-    *Once the task is COMPLETED, you can use `invoke --task` to send a new message with context.*
+    *Once the task is COMPLETED, you can use `invoke --ref` to send a new message referencing the completed task's context.*
 
 ---
 
