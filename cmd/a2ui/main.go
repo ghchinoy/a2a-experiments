@@ -155,7 +155,7 @@ To generate the response, you MUST follow these rules:
 
 		resp, err := e.client.Models.GenerateContent(
 			ctx,
-			"gemini-3.1-flash-lite-preview",
+			"gemini-3.8-flash",
 			genai.Text(inputText),
 			req,
 		)
